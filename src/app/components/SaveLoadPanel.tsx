@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Upload, Save, FolderOpen, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
-import type { FloorPlanElement } from '../types/floorplan';
+import type { FloorPlanElement, Diagram } from '../types/floorplan';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +16,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -26,20 +25,22 @@ interface SaveLoadPanelProps {
   onLoadElements: (elements: FloorPlanElement[]) => void;
 }
 
-interface SavedDiagram {
-  name: string;
-  date: string;
-  elements: FloorPlanElement[];
-}
+const DIAGRAMS_KEY = 'diagrams';
 
 export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) {
   const [diagramName, setDiagramName] = useState('');
-  const [savedDiagrams, setSavedDiagrams] = useState<SavedDiagram[]>(() => {
-    const saved = localStorage.getItem('floorplan_diagrams');
+  const [savedDiagrams, setSavedDiagrams] = useState<Diagram[]>(() => {
+    const saved = localStorage.getItem(DIAGRAMS_KEY);
     return saved ? JSON.parse(saved) : [];
   });
   const [isOpenSave, setIsOpenSave] = useState(false);
   const [isOpenLoad, setIsOpenLoad] = useState(false);
+
+  // Refresh saved diagrams list when opening load dialog
+  const refreshSavedDiagrams = () => {
+    const saved = localStorage.getItem(DIAGRAMS_KEY);
+    setSavedDiagrams(saved ? JSON.parse(saved) : []);
+  };
 
   const handleSaveToBrowser = () => {
     if (!diagramName.trim()) {
@@ -47,33 +48,32 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
       return;
     }
 
-    const newDiagram: SavedDiagram = {
+    const newDiagram: Diagram = {
+      id: Math.random().toString(36).substr(2, 9),
       name: diagramName.trim(),
-      date: new Date().toISOString(),
+      updatedAt: Date.now(),
       elements: elements,
     };
 
-    const updated = [...savedDiagrams, newDiagram];
+    const updated = [newDiagram, ...savedDiagrams];
     setSavedDiagrams(updated);
-    localStorage.setItem('floorplan_diagrams', JSON.stringify(updated));
+    localStorage.setItem(DIAGRAMS_KEY, JSON.stringify(updated));
     setDiagramName('');
     setIsOpenSave(false);
   };
 
-  const handleLoadFromBrowser = (diagram: SavedDiagram) => {
+  const handleLoadFromBrowser = (diagram: Diagram) => {
     if (window.confirm(`Load "${diagram.name}"? Current work will be replaced.`)) {
       onLoadElements(diagram.elements);
       setIsOpenLoad(false);
     }
-    onLoadElements(diagram.elements);
-    setIsOpenLoad(false);
   };
 
-  const handleDeleteDiagram = (index: number) => {
-    if (window.confirm('Delete this saved diagram?')) {
-      const updated = savedDiagrams.filter((_, i) => i !== index);
+  const handleDeleteDiagram = (id: string, name: string) => {
+    if (window.confirm(`Delete "${name}"?`)) {
+      const updated = savedDiagrams.filter((d) => d.id !== id);
       setSavedDiagrams(updated);
-      localStorage.setItem('floorplan_diagrams', JSON.stringify(updated));
+      localStorage.setItem(DIAGRAMS_KEY, JSON.stringify(updated));
     }
   };
 
@@ -81,6 +81,7 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
     const dataStr = JSON.stringify(
       {
         version: '1.0',
+        name: diagramName || 'floorplan',
         created: new Date().toISOString(),
         elements: elements,
       },
@@ -91,7 +92,7 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `floorplan-${Date.now()}.json`;
+    link.download = `${diagramName || 'floorplan'}-${Date.now()}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -105,9 +106,6 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
       try {
         const data = JSON.parse(e.target?.result as string);
         if (data.elements && Array.isArray(data.elements)) {
-          // if (window.confirm('Import this diagram? Current work will be replaced.')) {
-          //   onLoadElements(data.elements);
-          // }
           onLoadElements(data.elements);
         } else {
           alert('Invalid file format');
@@ -122,7 +120,7 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={(open) => { if (open) refreshSavedDiagrams(); }}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -134,41 +132,47 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent className="w-48">
-          <DropdownMenuLabel>File</DropdownMenuLabel>
+        <DropdownMenuContent className="w-56 bg-slate-900 border-slate-700 text-slate-200">
+          <DropdownMenuLabel className="text-slate-400">Project Management</DropdownMenuLabel>
 
-          <DropdownMenuItem onSelect={() => setIsOpenSave(true)}>
-            <Save className="h-4 w-4" />
-            <span className="ml-2">Save to Browser</span>
+          <DropdownMenuItem
+            onSelect={() => setIsOpenSave(true)}
+            className="hover:bg-slate-800 focus:bg-slate-800 text-slate-200"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            <span>Save as New Blueprint</span>
           </DropdownMenuItem>
 
-          <DropdownMenuItem onSelect={() => setIsOpenLoad(true)}>
-            <FolderOpen className="h-4 w-4" />
-            <span className="ml-2">Load from Browser</span>
+          <DropdownMenuItem
+            onSelect={() => { refreshSavedDiagrams(); setIsOpenLoad(true); }}
+            className="hover:bg-slate-800 focus:bg-slate-800 text-slate-200"
+          >
+            <FolderOpen className="h-4 w-4 mr-2" />
+            <span>Open Saved Blueprint</span>
           </DropdownMenuItem>
 
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="bg-slate-700" />
+
+          <DropdownMenuLabel className="text-slate-400">Import / Export</DropdownMenuLabel>
 
           <DropdownMenuItem
             onSelect={handleExportToFile}
             disabled={elements.length === 0}
+            className="hover:bg-slate-800 focus:bg-slate-800 text-slate-200"
           >
-            <Download className="h-4 w-4" />
-            <span className="ml-2">Download Diagram</span>
+            <Download className="h-4 w-4 mr-2" />
+            <span>Download .json file</span>
           </DropdownMenuItem>
 
           <DropdownMenuItem
-            onSelect={() =>
-              document.getElementById("file-import-input")?.click()
-            }
+            onSelect={() => document.getElementById("file-import-input")?.click()}
+            className="hover:bg-slate-800 focus:bg-slate-800 text-slate-200"
           >
-            <Upload className="h-4 w-4" />
-            <span className="ml-2">Import Diagram</span>
+            <Upload className="h-4 w-4 mr-2" />
+            <span>Import .json file</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-
 
       {/* Hidden File Input */}
       <input
@@ -179,79 +183,85 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
         className="hidden"
       />
 
-      {/* Keep Dialogs Below */}
+      {/* Save Dialog */}
       <Dialog open={isOpenSave} onOpenChange={setIsOpenSave}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+        <DialogContent className="bg-slate-900 border-slate-700 text-white shadow-2xl">
           <DialogHeader>
-            <DialogTitle>Save Diagram</DialogTitle>
-            <DialogDescription>
-              Enter a name for your diagram and save it to your browser.
+            <DialogTitle className="text-xl font-light">Save New Blueprint</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              This will create a new architectural blueprint in your browser storage.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4">
-            <Label htmlFor="diagram-name">Diagram Name</Label>
+          <div className="mt-4 space-y-2">
+            <Label htmlFor="diagram-name" className="text-slate-400">Blueprint Name</Label>
             <Input
               id="diagram-name"
               value={diagramName}
               onChange={(e) => setDiagramName(e.target.value)}
-              placeholder="Enter diagram name"
+              placeholder="e.g. Ground Floor Plan"
+              className="bg-slate-950 border-slate-700 text-white focus:ring-blue-500"
             />
           </div>
-          <div className="mt-4 flex justify-end">
+          <div className="mt-6 flex justify-end gap-3">
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => setIsOpenSave(false)}
+              className="text-slate-400 hover:text-white"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSaveToBrowser}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-6"
             >
-              Save
+              Save Blueprint
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isOpenLoad} onOpenChange={setIsOpenLoad}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+      {/* Load Dialog */}
+      <Dialog open={isOpenLoad} onOpenChange={(open) => { setIsOpenLoad(open); if (open) refreshSavedDiagrams(); }}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md shadow-2xl">
           <DialogHeader>
-            <DialogTitle>Load Diagram</DialogTitle>
+            <DialogTitle className="text-xl font-light">Open Blueprint</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Select a previously saved diagram from your browser storage.
+              Select a project to load into the editor.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+          <div className="mt-4 max-h-[400px] overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-700">
             {savedDiagrams.length === 0 ? (
-              <p className="text-center py-8 text-slate-500 italic">No saved diagrams found.</p>
+              <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl">
+                <p className="text-slate-500 italic">No blueprints found in storage.</p>
+              </div>
             ) : (
-              savedDiagrams.map((diagram, index) => (
+              savedDiagrams.map((diagram) => (
                 <div
-                  key={`${diagram.name}-${index}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 transition-colors"
+                  key={diagram.id}
+                  className="flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-950/50 hover:bg-slate-800/50 hover:border-blue-500/30 transition-all group"
                 >
                   <div className="flex flex-col overflow-hidden">
-                    <span className="font-medium truncate">{diagram.name}</span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(diagram.date).toLocaleDateString()} at {new Date(diagram.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className="font-medium text-slate-200 truncate">{diagram.name}</span>
+                    <span className="text-[10px] font-mono text-slate-500 uppercase mt-1">
+                      Modified {new Date(diagram.updatedAt).toLocaleDateString()}
                     </span>
                   </div>
 
                   <div className="flex gap-2 ml-4">
                     <Button
                       size="sm"
-                      variant="secondary"
-                      className="h-8 px-3"
+                      variant="ghost"
+                      className="h-8 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
                       onClick={() => handleLoadFromBrowser(diagram)}
                     >
                       Load
                     </Button>
                     <Button
                       size="sm"
-                      variant="destructive"
-                      className="h-8 w-8 p-0"
-                      onClick={() => handleDeleteDiagram(index)}
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-slate-600 hover:text-red-400 hover:bg-red-900/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleDeleteDiagram(diagram.id, diagram.name)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -261,8 +271,12 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
             )}
           </div>
 
-          <div className="mt-4 flex justify-end">
-            <Button variant="outline" onClick={() => setIsOpenLoad(false)}>
+          <div className="mt-6 flex justify-end">
+            <Button
+              variant="ghost"
+              onClick={() => setIsOpenLoad(false)}
+              className="text-slate-400 hover:text-white"
+            >
               Close
             </Button>
           </div>
@@ -270,5 +284,4 @@ export function SaveLoadPanel({ elements, onLoadElements }: SaveLoadPanelProps) 
       </Dialog>
     </>
   );
-
 }

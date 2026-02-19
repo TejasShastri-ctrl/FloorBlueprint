@@ -187,8 +187,7 @@ export function PropertiesPanel({ selectedElement, onUpdateElement }: Properties
         )}
 
         {(selectedElement.type === 'door' ||
-          selectedElement.type === 'window' ||
-          selectedElement.type === 'camera') && (
+          selectedElement.type === 'window') && (
             <div>
               <Label className="text-slate-300 text-xs mb-1">Rotation (degrees)</Label>
               <Input
@@ -199,6 +198,36 @@ export function PropertiesPanel({ selectedElement, onUpdateElement }: Properties
                 step={45}
               />
             </div>
+          )}
+
+          {selectedElement.type === 'camera' && (
+            <>
+            
+            <div>
+      <Label className="text-slate-300 text-xs mb-1">Room ID</Label>
+      <Input
+        type="text"
+        value={selectedElement.roomId}
+        onChange={(e) =>
+          onUpdateElement({ ...selectedElement, roomId: e.target.value })
+        }
+        className="bg-slate-800 border-slate-700 text-white"
+      />
+    </div>
+
+    <div>
+      <Label className="text-slate-300 text-xs mb-1">Rotation (degrees)</Label>
+      <Input
+        type="number"
+        value={Math.round(selectedElement.rotation)}
+        onChange={(e) =>
+          handleChange('rotation', Number(e.target.value))
+        }
+        className="bg-slate-800 border-slate-700 text-white"
+        step={45}
+      />
+    </div>
+    </>
           )}
 
         <div className="pt-2 border-t border-slate-700">

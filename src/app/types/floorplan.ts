@@ -14,6 +14,7 @@ export interface Room {
     height: number;
     name?: string;
     color?: string;
+    cameraIds?: string[];
 }
 
 export interface Door {
@@ -38,6 +39,7 @@ export interface Camera {
     x: number;
     y: number;
     rotation: number;
+    roomId?: string;
 }
 
 export interface Wall {
@@ -71,6 +73,13 @@ export interface TextBlock {
 }
 
 export type FloorPlanElement = Room | Door | Window | Camera | Wall | PencilPath | TextBlock;
+
+export interface Diagram {
+    id: string;
+    name: string;
+    elements: FloorPlanElement[];
+    updatedAt: number;
+}
 
 export interface MarqueeSelection {
     startPoint: Point;
